@@ -38,6 +38,7 @@ endif()
 add_library(library_core
     src/Book.cpp
     src/Member.cpp
+    src/InMemoryBookRepository.cpp
     src/Results.cpp
 )
 
