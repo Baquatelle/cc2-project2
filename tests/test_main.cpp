@@ -138,4 +138,113 @@ TEST(MemberTest, PremiumMemberCappedAtFive)
     EXPECT_EQ(lib.BorrowBook(2, "6"), BorrowResult::BorrowLimitReached);
 }
 
+// ------------------------------------------------------------------
+// Library operations
+// ------------------------------------------------------------------
+
+TEST(LibraryOperationsTest, AddBookRejectsDuplicateIsbn)
+{
+    MyLibrary lib;
+    EXPECT_EQ(lib.AddBook(make_book("same")), AddBookResult::Success);
+    EXPECT_EQ(lib.AddBook(make_book("same")), AddBookResult::DuplicateIsbn);
+    EXPECT_EQ(lib.GetRepository().size(), std::size_t{1});
+    EXPECT_THROW((void)lib.AddBook(nullptr), std::invalid_argument);
+}
+
+TEST(LibraryOperationsTest, BorrowFailureModes)
+{
+    MyLibrary lib;
+    stock(lib, 2);
+    const auto ana = std::make_shared<RegularMember>("Ana", 1);
+    const auto ben = std::make_shared<RegularMember>("Ben", 2);
+    EXPECT_TRUE(lib.RegisterMember(ana));
+
+    EXPECT_EQ(lib.BorrowBook(1, "nope"), BorrowResult::BookNotFound);
+    EXPECT_EQ(lib.BorrowBook(99, "1"), BorrowResult::MemberNotRegistered);
+
+    EXPECT_EQ(lib.BorrowBook(1, "1"), BorrowResult::Success);
+    EXPECT_EQ(lib.BorrowBook(1, "1"), BorrowResult::BookAlreadyBorrowed);
+
+    // Also unavailable to a different member.
+    EXPECT_TRUE(lib.RegisterMember(ben));
+    EXPECT_EQ(lib.BorrowBook(2, "1"), BorrowResult::BookAlreadyBorrowed);
+}
+
+TEST(LibraryOperationsTest, ReturnBookFlow)
+{
+    MyLibrary lib;
+    stock(lib, 2);
+    const auto ana = std::make_shared<RegularMember>("Ana", 1);
+    const auto ben = std::make_shared<RegularMember>("Ben", 2);
+    EXPECT_TRUE(lib.RegisterMember(ana));
+    EXPECT_TRUE(lib.RegisterMember(ben));
+
+    EXPECT_EQ(lib.BorrowBook(1, "1"), BorrowResult::Success);
+
+    EXPECT_EQ(lib.ReturnBook(1, "nope"), ReturnResult::BookNotFound);
+    EXPECT_EQ(lib.ReturnBook(99, "1"), ReturnResult::MemberNotRegistered);
+    EXPECT_EQ(lib.ReturnBook(1, "2"), ReturnResult::NotBorrowedByMember);
+    EXPECT_EQ(lib.ReturnBook(2, "1"), ReturnResult::NotBorrowedByMember);
+
+    EXPECT_EQ(lib.ReturnBook(1, "1"), ReturnResult::Success);
+    EXPECT_EQ(ana->BorrowedCount(), std::size_t{0});
+    EXPECT_TRUE(!lib.IsBorrowed("1"));
+
+    // Returning twice is not a success.
+    EXPECT_EQ(lib.ReturnBook(1, "1"), ReturnResult::NotBorrowedByMember);
+
+    // Back in circulation for somebody else.
+    EXPECT_EQ(lib.BorrowBook(2, "1"), BorrowResult::Success);
+}
+
+TEST(LibraryOperationsTest, ReturnedBookFreesASlot)
+{
+    MyLibrary lib;
+    stock(lib, 4);
+    const auto ana = std::make_shared<RegularMember>("Ana", 1);
+    EXPECT_TRUE(lib.RegisterMember(ana));
+
+    for (int i = 1; i <= 3; ++i)
+    {
+        EXPECT_EQ(lib.BorrowBook(1, std::to_string(i)), BorrowResult::Success);
+    }
+    EXPECT_EQ(lib.BorrowBook(1, "4"), BorrowResult::BorrowLimitReached);
+
+    EXPECT_EQ(lib.ReturnBook(1, "2"), ReturnResult::Success);
+    EXPECT_EQ(lib.BorrowBook(1, "4"), BorrowResult::Success);
+    EXPECT_EQ(ana->BorrowedCount(), std::size_t{3});
+}
+
+// ------------------------------------------------------------------
+// ASSOCIATION consistency
+// ------------------------------------------------------------------
+
+TEST(AssociationTest, IsConsistentOnBothSides)
+{
+    MyLibrary lib;
+    stock(lib, 2);
+    const auto ana = std::make_shared<RegularMember>("Ana", 1);
+    EXPECT_TRUE(lib.RegisterMember(ana));
+    EXPECT_EQ(lib.BorrowBook(1, "1"), BorrowResult::Success);
+
+    // Member side sees the book...
+    EXPECT_TRUE(ana->HasBorrowed("1"));
+    EXPECT_EQ(ana->ListOfBorrowedBooks().size(), std::size_t{1});
+
+    // ...and the library side sees both ends of the same relationship.
+    const auto loan = lib.FindLoan("1");
+    EXPECT_TRUE(loan.has_value());
+    if (loan.has_value())
+    {
+        const auto borrowed_book = loan->mBook.lock();
+        const auto borrower = loan->mBorrower.lock();
+        EXPECT_TRUE(borrowed_book != nullptr);
+        EXPECT_TRUE(borrower == ana);
+        if (borrowed_book)
+        {
+            EXPECT_EQ(borrowed_book->ISBN(), std::string("1"));
+        }
+    }
+}
+
 } // namespace
