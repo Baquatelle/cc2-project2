@@ -52,3 +52,30 @@ target_link_libraries(library_core PRIVATE library_warnings)
 # ---------------------------------------------------------------------------
 add_executable(library_demo app/main.cpp)
 target_link_libraries(library_demo PRIVATE library_core library_warnings)
+
+# ---------------------------------------------------------------------------
+# Tests (GoogleTest, fetched automatically on first configure)
+# ---------------------------------------------------------------------------
+include(CTest)
+include(FetchContent)
+
+# Match MSVC's default /MD(d) runtime so gtest links cleanly against it.
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.15.2
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(googletest)
+
+add_executable(library_tests tests/test_main.cpp)
+target_link_libraries(library_tests PRIVATE library_core library_warnings GTest::gtest_main)
+
+# Discovers every TEST() at build time and registers each one as its own
+# CTest entry, so individual test names never need to be listed here.
+include(GoogleTest)
+gtest_discover_tests(library_tests)
