@@ -16,6 +16,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 using namespace library;
 
@@ -24,6 +26,8 @@ namespace
 
 void heading(std::string_view aText)
 {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200)); // for screen recording purposes
+
     std::cout << std::format("\n{:=^70}\n", std::format(" {} ", aText));
 }
 
