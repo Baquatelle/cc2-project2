@@ -81,4 +81,25 @@ std::string_view to_string(MemberBorrowResult result) noexcept
     return "Unknown";
 }
 
+void PrintTo(AddBookResult result, std::ostream *os)
+{
+    *os << to_string(result);
+}
+void PrintTo(BorrowResult result, std::ostream *os)
+{
+    *os << to_string(result);
+}
+void PrintTo(ReturnResult result, std::ostream *os)
+{
+    *os << to_string(result);
+}
+void PrintTo(RemoveBookResult result, std::ostream *os)
+{
+    *os << to_string(result);
+}
+void PrintTo(MemberBorrowResult result, std::ostream *os)
+{
+    *os << to_string(result);
+}
+
 } // namespace library

@@ -57,4 +57,12 @@ enum class MemberBorrowResult
 [[nodiscard]] std::string_view to_string(RemoveBookResult result) noexcept;
 [[nodiscard]] std::string_view to_string(MemberBorrowResult result) noexcept;
 
+// Also found by ADL -- lets GoogleTest print these enums by name (via
+// to_string) in failure messages instead of a raw integer.
+void PrintTo(AddBookResult result, std::ostream *os);
+void PrintTo(BorrowResult result, std::ostream *os);
+void PrintTo(ReturnResult result, std::ostream *os);
+void PrintTo(RemoveBookResult result, std::ostream *os);
+void PrintTo(MemberBorrowResult result, std::ostream *os);
+
 } // namespace library
