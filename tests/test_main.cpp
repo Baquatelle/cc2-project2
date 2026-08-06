@@ -1,3 +1,4 @@
+#include <library/AbstractLibrary.h>
 #include <library/Book.h>
 #include <library/IBookRepository.h>
 #include <library/InMemoryBookRepository.h>
@@ -426,6 +427,80 @@ TEST(CompositionTest, RemoveBookRefusesWhileOnLoan)
     EXPECT_EQ(lib.ReturnBook(1, "1"), ReturnResult::Success);
     EXPECT_EQ(lib.RemoveBook("1"), RemoveBookResult::Success);
     EXPECT_EQ(lib.GetRepository().size(), std::size_t{0});
+}
+
+// ------------------------------------------------------------------
+// DIP: inject an alternative repository
+// ------------------------------------------------------------------
+
+/// Instrumented repository proving MyLibrary talks only to the abstraction.
+/// It composes the real implementation via unique_ptr and counts calls.
+class CountingRepository final : public IBookRepository
+{
+  public:
+    [[nodiscard]] bool Add(std::shared_ptr<Book> book) override
+    {
+        ++add_calls;
+        return inner_->Add(std::move(book));
+    }
+    [[nodiscard]] std::weak_ptr<Book> Find(const std::string &isbn) const override
+    {
+        ++find_calls;
+        return inner_->Find(isbn);
+    }
+    [[nodiscard]] bool Contains(const std::string &isbn) const override
+    {
+        return inner_->Contains(isbn);
+    }
+    [[nodiscard]] bool Remove(const std::string &isbn) override
+    {
+        return inner_->Remove(isbn);
+    }
+    [[nodiscard]] std::size_t size() const noexcept override
+    {
+        return inner_->size();
+    }
+    [[nodiscard]] std::vector<std::weak_ptr<Book>> GetAll() const override
+    {
+        return inner_->GetAll();
+    }
+
+    int         add_calls = 0;
+    mutable int find_calls = 0;
+
+  private:
+    std::unique_ptr<IBookRepository> inner_ = std::make_unique<InMemoryBookRepository>();
+};
+
+TEST(DipTest, RepositoryIsInjectable)
+{
+    auto counting = std::make_unique<CountingRepository>();
+    // Borrow an observer before ownership moves into the library.
+    CountingRepository &probe = *counting;
+
+    MyLibrary lib(std::move(counting));
+    EXPECT_EQ(lib.AddBook(make_book("1")), AddBookResult::Success);
+    EXPECT_EQ(probe.add_calls, 1);
+
+    const auto ana = std::make_shared<RegularMember>("Ana", 1);
+    EXPECT_TRUE(lib.RegisterMember(ana));
+    EXPECT_EQ(lib.BorrowBook(1, "1"), BorrowResult::Success);
+    EXPECT_TRUE(probe.find_calls >= 1);
+
+    EXPECT_THROW(MyLibrary(nullptr), std::invalid_argument);
+}
+
+TEST(DipTest, UsableThroughTheAbstraction)
+{
+    MyLibrary concrete;
+    // Clients depend on the abstract concept, not the tangible library.
+    AbstractLibrary &lib = concrete;
+
+    EXPECT_EQ(lib.AddBook(make_book("1")), AddBookResult::Success);
+    const auto ana = std::make_shared<PremiumMember>("Ana", 1);
+    EXPECT_TRUE(concrete.RegisterMember(ana));
+    EXPECT_EQ(lib.BorrowBook(1, "1"), BorrowResult::Success);
+    EXPECT_EQ(lib.ReturnBook(1, "1"), ReturnResult::Success);
 }
 
 } // namespace
